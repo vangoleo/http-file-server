@@ -1,11 +1,17 @@
 package main
 
 import (
+    "encoding/json"
+    "fmt"
     "github.com/alecthomas/kingpin"
     _ "github.com/alecthomas/kingpin"
     _ "github.com/gorilla/handlers"
     _ "github.com/shurcooL/vfsgen"
     "log"
+    "net"
+    "net/http"
+    "strconv"
+    "strings"
 )
 type Configure struct {
     Addr      string     `yaml:"addr"`
@@ -38,18 +44,30 @@ func main() {
         log.Fatal(err)
     }
 
+    ss := NewHTTPStaticServer(gcfg.Root)
 
+    var hdlr http.Handler = ss
 
+    http.Handle("/",hdlr)
+    http.Handle("/-/assets", http.StripPrefix("/-/assets/", http.FileServer(Assets)))
+    http.HandleFunc("/-/sysinfo", func(writer http.ResponseWriter, request *http.Request) {
+        writer.Header().Set("Content-Type", "application/json")
+        data, _ := json.Marshal(map[string]interface{}{
+            "version": "1.0.0",
+        })
+        writer.Write(data)
+    })
+
+    if gcfg.Addr == "" {
+        gcfg.Addr = fmt.Sprintf(":%d", gcfg.Port)
+    }
+    if !strings.Contains(gcfg.Addr, ":") {
+        gcfg.Addr = ":" + gcfg.Addr
+    }
+    _, port, _ := net.SplitHostPort(gcfg.Addr)
+    log.Printf("listening on %s, local address http://%s:%s\n", strconv.Quote(gcfg.Addr), getLocalIP(), port)
+
+    var err error
+    err = http.ListenAndServe(gcfg.Addr, nil)
+    log.Fatal(err)
 }
-
-
-
-
-
-
-
-
-
-}
-
-

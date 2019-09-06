@@ -10,6 +10,7 @@ import (
     "net/http"
     "os"
     "path/filepath"
+    "strconv"
     "strings"
 )
 
@@ -55,13 +56,17 @@ func (s *HTTPStaticServer) hIndex(w http.ResponseWriter, r *http.Request){
         if r.Method == "HEAD" {
             return
         }
-
+        renderHTML(w,"index.html",s)
+    }else {
+        if r.FormValue("download") == "true" {
+            w.Header().Set("Content-Disposition", "attachment; filename="+strconv.Quote(filepath.Base(path)))
+        }
+        http.ServeFile(w,r,relPath)
     }
+}
 
-
-
-
-
+func (s *HTTPStaticServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+    s.m.ServeHTTP(w, r)
 }
 
 func (s *HTTPStaticServer) hJSONList(w http.ResponseWriter, r *http.Request){

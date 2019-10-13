@@ -40,8 +40,120 @@ func NewHTTPStaticServer(root string) *HTTPStaticServer {
         m:    m,
     }
 
-    m.HandleFunc("/{path:.*}",s.hIndex).Methods("GET", "HEAD")
+    //m.HandleFunc("/{path:.*}",s.hIndex).Methods("GET", "HEAD")
+    //m.Handle("/",http.FileServer(Assets))
+    //m.Handle("/",http.StripPrefix("/", http.FileServer(Assets)))
+    m.HandleFunc("/-/files/{path:.*}",s.dirOrFile)
     return s
+}
+
+func (s *HTTPStaticServer) dirOrFile(w http.ResponseWriter, r *http.Request) {
+    path := strings.Replace(r.URL.Path,"/-/files/","",1)
+    path = filepath.Join(s.Root, path)
+
+    if isDir(path){
+        s.dir(w,r)
+    }else {
+        s.file(w,r)
+    }
+    //w.Write([]byte(testdata))
+}
+
+func (s *HTTPStaticServer) dir(w http.ResponseWriter, r *http.Request){
+
+    requestPath := strings.Replace(r.URL.Path,"/-/files/","",1)
+    localPath := filepath.Join(s.Root, requestPath)
+
+    //requestPath := mux.Vars(r)["path"]
+    //localPath := filepath.Join(s.Root, requestPath)
+
+    // path string -> info os.FileInfo
+    fileInfoMap := make(map[string]os.FileInfo,0)
+
+    infos, err := ioutil.ReadDir(localPath)
+    if err != nil {
+        http.Error(w,err.Error(), 500)
+        return
+    }
+    for _, info := range infos {
+        fileInfoMap[filepath.Join(requestPath,info.Name())] = info
+    }
+
+    // turn file list -> json
+    lrs := make([]HTTPFileInfo2,0)
+    for path, info := range fileInfoMap {
+        lr := HTTPFileInfo2{
+            Name:    info.Name(),
+            Path:    path,
+            ModTime: "2019-10-01 10:05:00",
+        }
+        if info.IsDir() {
+            name := deepPath(localPath, info.Name())
+            lr.Name = name
+            lr.Path = filepath.Join(filepath.Dir(path), name)
+            lr.Type = "dir"
+            lr.Size = s.historyDirSize(lr.Path)
+        } else {
+            lr.Type = "file"
+            lr.Size = info.Size()
+        }
+        lrs = append(lrs, lr)
+    }
+
+    data, _ := json.Marshal(lrs)
+    w.Header().Set("Content-Type", "application/json")
+    w.Write(data)
+}
+
+func (s *HTTPStaticServer) file(w http.ResponseWriter, r *http.Request){
+
+    requestPath := strings.Replace(r.URL.Path,"/-/files/","",1)
+    localPath := filepath.Join(s.Root, requestPath)
+
+    w.Header().Set("Content-Disposition", "attachment; filename="+strconv.Quote(filepath.Base(requestPath)))
+    http.ServeFile(w,r,localPath)
+
+    //if r.FormValue("download") == "true" {
+    //            w.Header().Set("Content-Disposition", "attachment; filename="+strconv.Quote(filepath.Base(path)))
+    //        }
+    //        http.ServeFile(w,r,relPath)
+
+    // path string -> info os.FileInfo
+    //fileInfoMap := make(map[string]os.FileInfo,0)
+
+    //infos, err := ioutil.ReadDir(localPath)
+    //if err != nil {
+    //    http.Error(w,err.Error(), 500)
+    //    return
+    //}
+    //for _, info := range infos {
+    //    fileInfoMap[filepath.Join(requestPath,info.Name())] = info
+    //}
+    //
+    //// turn file list -> json
+    //lrs := make([]HTTPFileInfo2,0)
+    //for path, info := range fileInfoMap {
+    //    lr := HTTPFileInfo2{
+    //        Name:    info.Name(),
+    //        Path:    path,
+    //        ModTime: "2019-10-01 10:05:00",
+    //    }
+    //    if info.IsDir() {
+    //        name := deepPath(localPath, info.Name())
+    //        lr.Name = name
+    //        lr.Path = filepath.Join(filepath.Dir(path), name)
+    //        lr.Type = "dir"
+    //        lr.Size = s.historyDirSize(lr.Path)
+    //    } else {
+    //        lr.Type = "file"
+    //        lr.Size = info.Size()
+    //    }
+    //    lrs = append(lrs, lr)
+    //}
+    //
+    //data, _ := json.Marshal(lrs)
+    //w.Header().Set("Content-Type", "application/json")
+    //w.Write(data)
 }
 
 func (s *HTTPStaticServer) hIndex(w http.ResponseWriter, r *http.Request){
@@ -121,6 +233,15 @@ type HTTPFileInfo struct {
     ModTime   int64   `json:"mtime"`
 }
 
+type HTTPFileInfo2 struct {
+    Name      string `json:"name"`
+    Path      string `json:"path"`
+    Type      string `json:"type"`
+    Size      int64  `json:"size"`
+    ModTime   string `json:"modTime"`
+    Actions   string `json:"actions"`
+}
+
 func deepPath(basedir, name string) string {
     isDir := true
     // loop max 5, incase of for loop not finished
@@ -193,3 +314,32 @@ func executeTemplate(w http.ResponseWriter, name string, v interface{}){
     _tmpls[name] = t
     t.Execute(w,v)
 }
+
+var testdata = `
+[
+    {
+        "name": "hello.txt",
+        "size": "10kb",
+        "modTime": "2019-10-10 10:10:10",
+        "actions": "Download, View"
+    },
+    {
+        "name": "world.txt",
+        "size": "15kb",
+        "modTime": "2019-10-01 10:10:10",
+        "actions": "Download, View"
+    },
+    {
+        "name": "foo.pdf",
+        "size": "20kb",
+        "modTime": "2019-05-01 10:10:10",
+        "actions": "Download, View"
+    },
+    {
+        "name": "bar.pdf",
+        "size": "28kb",
+        "modTime": "2019-05-10 11:10:10",
+        "actions": "Download, View"
+    }
+]
+`

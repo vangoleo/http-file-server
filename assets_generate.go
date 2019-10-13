@@ -10,7 +10,8 @@ import (
 )
 
 func main() {
-	var fs http.FileSystem = http.Dir("assets")
+	//var fs http.FileSystem = http.Dir("assets")
+	var fs http.FileSystem = http.Dir("vue-hello-world/dist")
 
 	err := vfsgen.Generate(fs, vfsgen.Options{
 		PackageName:     "main",

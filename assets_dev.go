@@ -5,5 +5,5 @@ package main
 
 import "net/http"
 
-var Assets http.FileSystem = http.Dir("assets")
+var Assets http.FileSystem = http.Dir("vue-hello-world/dist")
 
